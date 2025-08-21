@@ -324,7 +324,7 @@ impl UI {
         let status_text = if let Some(ref msg) = self.status_message {
             msg.clone()
         } else {
-            "Ready - Press H for help".to_string()
+            "Ready - Press F1 for help".to_string()
         };
         
         let status = Paragraph::new(status_text)
