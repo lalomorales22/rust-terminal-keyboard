@@ -1,4 +1,7 @@
 # 🎹 Terminal Piano
+<img width="326" height="477" alt="Screenshot 2025-08-21 at 10 38 35 AM" src="https://github.com/user-attachments/assets/d26ccf08-f153-4098-9580-d75db9b1e46f" />
+<img width="577" height="521" alt="Screenshot 2025-08-21 at 10 37 59 AM" src="https://github.com/user-attachments/assets/aa7368fc-2c71-4439-98f0-f611716586c8" />
+
 
 A beautiful, fully-featured grand piano in your terminal with AI-powered learning capabilities.
 
