@@ -1,0 +1,39 @@
+###############################################################################
+# Rust/Cargo
+###############################################################################
+# Build output
+target/
+
+# rustfmt backup files
+**/*.rs.bk
+
+# If you publish a library crate, you might ignore Cargo.lock.
+# For binary applications, keep Cargo.lock tracked (default here: do NOT ignore).
+# Uncomment the next line only if this is a library crate.
+# Cargo.lock
+
+###############################################################################
+# Editors/IDE
+###############################################################################
+.vscode/
+.idea/
+*.code-workspace
+
+###############################################################################
+# OS junk
+###############################################################################
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+.Spotlight-V100
+.Trashes
+
+###############################################################################
+# Logs / temp / caches
+###############################################################################
+*.log
+*.tmp
+tmp/
+.cache/
+
