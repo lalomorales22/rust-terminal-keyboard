@@ -2,6 +2,7 @@
 
 <img width="752" height="424" alt="Screenshot 2025-08-22 at 12 37 49 AM" src="https://github.com/user-attachments/assets/981b6ccd-329e-45e2-b691-0e69ffc7f7d9" />
 
+<img width="771" height="462" alt="Screenshot 2025-08-22 at 12 38 45 AM" src="https://github.com/user-attachments/assets/f6efe506-329c-4500-a496-427cc35a90d6" />
 
 A spectacular, fully-featured grand piano in your terminal with colorful note visualization, MIDI playback, and recording capabilities. Experience music in living color with note-specific visual effects and full-width responsive piano layout!
 
