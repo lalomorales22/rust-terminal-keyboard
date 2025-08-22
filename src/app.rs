@@ -5,6 +5,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
+use rand;
 use std::io;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -123,6 +124,15 @@ impl App {
             return Ok(());
         }
 
+        // Debug ALL key presses
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/piano_debug.log") {
+            writeln!(file, "KEY PRESSED: {:?} with modifiers: {:?}", key.code, key.modifiers).ok();
+        }
+
         match (key.code, key.modifiers) {
             (KeyCode::Char('q'), KeyModifiers::NONE) => {
                 self.should_quit = true;
@@ -187,10 +197,40 @@ impl App {
             (KeyCode::Char('p'), KeyModifiers::NONE) => {
                 self.load_last_recording().await?;
             }
-            (KeyCode::Char('P'), KeyModifiers::NONE) => {
-                self.midi_player.toggle_playback();
-                let status = if self.midi_player.is_playing { "Playing" } else { "Paused" };
-                self.ui.set_status_message(format!("MIDI playback: {}", status));
+            (KeyCode::Char('P'), KeyModifiers::SHIFT) => {
+                // Debug key press
+                use std::io::Write;
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/piano_debug.log") {
+                    writeln!(file, "CAPITAL P PRESSED - current_file: {:?}, events: {}", 
+                            self.midi_player.current_file.as_ref().map(|p| p.file_name().unwrap_or_default()),
+                            self.midi_player.events.len()).ok();
+                }
+                
+                if self.midi_player.current_file.is_some() {
+                    let events_count = self.midi_player.events.len();
+                    let total_ticks = self.midi_player.total_ticks;
+                    let was_playing = self.midi_player.is_playing;
+                    
+                    self.midi_player.toggle_playback();
+                    
+                    let status = if self.midi_player.is_playing { "Playing" } else { "Paused" };
+                    
+                    // More debug
+                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/piano_debug.log") {
+                        writeln!(file, "TOGGLE RESULT - was_playing: {}, now_playing: {}, events: {}", 
+                                was_playing, self.midi_player.is_playing, events_count).ok();
+                    }
+                    
+                    self.ui.set_status_message(format!("MIDI {}: {} events, {} ticks", status, events_count, total_ticks));
+                } else {
+                    self.ui.set_status_message("No MIDI file loaded. Press 'L' to load a file.".to_string());
+                }
             }
             (KeyCode::Char('m'), KeyModifiers::NONE) => {
                 self.ui.metronome = !self.ui.metronome;
@@ -246,6 +286,37 @@ impl App {
         Ok(())
     }
 
+    async fn play_midi_note(&mut self, midi_note: u8, velocity: u8) -> Result<()> {
+        self.piano.press_key(midi_note);
+        self.audio_engine.play_note(midi_note)?;
+        
+        let (x, y) = self.get_key_position(midi_note);
+        
+        // Add prominent visual effects for MIDI playback with intensity based on velocity
+        self.visual_effects.add_key_press(midi_note, x, y);
+        
+        // Create spectacular particle effects for MIDI notes
+        // More particles for louder notes (higher velocity)
+        let particle_count = 3 + (velocity / 32) as usize; // 3-6 particles based on velocity
+        
+        for i in 0..particle_count {
+            let offset_x = x + (rand::random::<u16>() % 8).saturating_sub(4); // Spread around key
+            let offset_y = y.saturating_sub(rand::random::<u16>() % 3); // Slightly above key
+            self.visual_effects.add_key_press(midi_note, offset_x, offset_y);
+        }
+        
+        // Add extra burst for loud notes
+        if velocity > 100 {
+            for _ in 0..3 {
+                let burst_x = x + (rand::random::<u16>() % 12).saturating_sub(6);
+                let burst_y = y.saturating_sub(rand::random::<u16>() % 5);
+                self.visual_effects.add_key_press(midi_note, burst_x, burst_y);
+            }
+        }
+        
+        Ok(())
+    }
+
     async fn release_note(&mut self, midi_note: u8) -> Result<()> {
         self.piano.release_key(midi_note);
         self.audio_engine.stop_note(midi_note);
@@ -254,13 +325,29 @@ impl App {
     }
 
     fn get_key_position(&self, midi_note: u8) -> (u16, u16) {
-        let layout = self.piano.get_key_layout();
-        for (_, note, _) in layout {
-            if note.midi_note == midi_note {
-                return (10, 5);
-            }
+        // Calculate key position based on MIDI note for better visual effects
+        let note_in_octave = midi_note % 12;
+        let _octave = midi_note / 12;
+        
+        // Base position calculation - approximate position in the current layout
+        let white_key_positions = [0, 2, 4, 5, 7, 9, 11]; // C, D, E, F, G, A, B positions
+        let black_key_positions = [1, 3, 6, 8, 10]; // C#, D#, F#, G#, A# positions
+        
+        let is_black_key = matches!(note_in_octave, 1 | 3 | 6 | 8 | 10);
+        
+        if is_black_key {
+            // For black keys, position them between white keys
+            let black_index = black_key_positions.iter().position(|&x| x == note_in_octave).unwrap_or(0);
+            let x = 15 + (black_index as u16 * 12); // Approximate spacing
+            let y = 3; // Black keys are higher
+            (x, y)
+        } else {
+            // For white keys, spread them evenly
+            let white_index = white_key_positions.iter().position(|&x| x == note_in_octave).unwrap_or(0);
+            let x = 10 + (white_index as u16 * 10); // Approximate spacing for white keys
+            let y = 8; // White keys are lower
+            (x, y)
         }
-        (0, 0)
     }
 
     async fn update(&mut self) -> Result<()> {
@@ -273,11 +360,14 @@ impl App {
         self.piano.update(); // Auto-release keys after timeout
 
         let pending_midi_events = self.midi_player.get_pending_events();
+        if !pending_midi_events.is_empty() && self.debug_mode {
+            self.ui.set_status_message(format!("Processing {} MIDI events", pending_midi_events.len()));
+        }
         for event in pending_midi_events {
             match event {
                 midly::MidiMessage::NoteOn { key, vel } => {
                     if vel.as_int() > 0 {
-                        self.play_note(key.as_int()).await?;
+                        self.play_midi_note(key.as_int(), vel.as_int()).await?;
                     } else {
                         self.release_note(key.as_int()).await?;
                     }

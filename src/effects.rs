@@ -132,7 +132,9 @@ impl VisualEffects {
         if let Some((_, effect)) = self.key_effects.iter().find(|(note, _)| *note == midi_note) {
             if effect.is_active() {
                 let intensity = effect.get_current_intensity();
-                return Self::blend_colors(base_color, effect.color, intensity);
+                // Use the beautiful note-specific color for the keys too!
+                let note_color = Self::note_to_color(midi_note);
+                return Self::blend_colors(base_color, note_color, intensity * 0.7);
             }
         }
         base_color
@@ -151,8 +153,23 @@ impl VisualEffects {
     }
     
     fn note_to_color(midi_note: u8) -> Color {
-        let hue = (midi_note % 12) as f32 / 12.0;
-        Self::hsv_to_rgb(hue * 360.0, 0.8, 1.0)
+        // Map each musical note to a specific color
+        // Using beautiful tones of oranges, blues, reds, yellows, and greens
+        match midi_note % 12 {
+            0  => Color::Rgb(255, 85, 85),   // C - Bright Red
+            1  => Color::Rgb(255, 140, 70),  // C# - Warm Orange
+            2  => Color::Rgb(255, 215, 0),   // D - Golden Yellow
+            3  => Color::Rgb(173, 255, 47),  // D# - Green Yellow
+            4  => Color::Rgb(50, 205, 50),   // E - Lime Green
+            5  => Color::Rgb(0, 191, 165),   // F - Teal Green
+            6  => Color::Rgb(70, 130, 255),  // F# - Sky Blue
+            7  => Color::Rgb(30, 144, 255),  // G - Dodger Blue
+            8  => Color::Rgb(138, 43, 226),  // G# - Blue Violet
+            9  => Color::Rgb(255, 20, 147),  // A - Deep Pink
+            10 => Color::Rgb(255, 105, 180), // A# - Hot Pink
+            11 => Color::Rgb(255, 165, 0),   // B - Orange
+            _  => Color::White,              // Fallback
+        }
     }
     
     fn hsv_to_rgb(h: f32, s: f32, v: f32) -> Color {

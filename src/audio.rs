@@ -17,7 +17,22 @@ pub struct AudioEngine {
 
 impl AudioEngine {
     pub fn new() -> Result<Self> {
-        let (stream, stream_handle) = OutputStream::try_default()?;
+        let (stream, stream_handle) = match OutputStream::try_default() {
+            Ok((s, h)) => (s, h),
+            Err(e) => {
+                eprintln!("Failed to create default audio output stream: {}", e);
+                eprintln!("Trying alternative audio initialization...");
+                
+                // Try to create with specific device/format
+                match rodio::OutputStream::try_default() {
+                    Ok((s, h)) => (s, h),
+                    Err(e2) => {
+                        eprintln!("Alternative audio initialization also failed: {}", e2);
+                        return Err(anyhow::anyhow!("Could not initialize audio: {} (fallback: {})", e, e2));
+                    }
+                }
+            }
+        };
         
         let mut engine = Self {
             _stream: stream,
@@ -66,6 +81,9 @@ impl AudioEngine {
     }
     
     pub fn play_note(&self, midi_note: u8) -> Result<()> {
+        // Stop any existing note on this key first
+        self.stop_note(midi_note);
+        
         if let Some(sample_data) = self.samples.get(&midi_note) {
             let cursor = std::io::Cursor::new(sample_data.clone());
             let source = PcmSource::new(cursor, 44100, 1)?;
@@ -73,6 +91,7 @@ impl AudioEngine {
             let sink = Sink::try_new(&self.stream_handle)?;
             sink.set_volume(self.volume);
             sink.append(source);
+            sink.play();
             
             {
                 let mut sinks = self.sinks.lock().unwrap();

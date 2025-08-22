@@ -108,15 +108,28 @@ impl Piano {
     }
     
     fn setup_key_mappings(&mut self) {
-        // Use keys that don't conflict with controls: avoid 'q' (quit), '[' and ']' (volume)
-        let white_keys = ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'];
-        let black_keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
+        self.key_mappings.clear();
+        
+        // Map keyboard keys to piano notes in a logical way
+        // White keys: q w e r t y u i o p for one octave
+        // Black keys: 2 3 5 6 7 9 0 for sharps/flats
+        let white_keys = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'];
+        let black_keys = ['2', '3', '5', '6', '7', '9', '0'];
+        
+        // Second octave row
+        let white_keys_2 = ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';'];
+        let black_keys_2 = ['1', '4', '8', '-', '='];
         
         let base_octave = self.current_octave * 12;
+        
+        // Map first octave
         let mut white_index = 0;
         let mut black_index = 0;
         
-        for midi_note in base_octave..base_octave + 12 {
+        for note_offset in 0..12 {
+            let midi_note = base_octave + note_offset;
+            if midi_note > 127 { break; }
+            
             let note = Note::new(midi_note);
             
             match note.note_type {
@@ -134,6 +147,41 @@ impl Piano {
                 }
             }
         }
+        
+        // Map second octave if space allows
+        white_index = 0;
+        black_index = 0;
+        
+        for note_offset in 12..24 {
+            let midi_note = base_octave + note_offset;
+            if midi_note > 127 { break; }
+            
+            let note = Note::new(midi_note);
+            
+            match note.note_type {
+                NoteType::White => {
+                    if white_index < white_keys_2.len() {
+                        self.key_mappings.insert(white_keys_2[white_index], midi_note);
+                        white_index += 1;
+                    }
+                }
+                NoteType::Black => {
+                    if black_index < black_keys_2.len() {
+                        self.key_mappings.insert(black_keys_2[black_index], midi_note);
+                        black_index += 1;
+                    }
+                }
+            }
+        }
+        
+        // Add some special mappings for common keys
+        self.key_mappings.insert('z', base_octave.saturating_sub(12)); // Lower C
+        self.key_mappings.insert('x', base_octave.saturating_sub(10)); // Lower D
+        self.key_mappings.insert('c', base_octave.saturating_sub(8));  // Lower E
+        self.key_mappings.insert('v', base_octave.saturating_sub(7));  // Lower F
+        self.key_mappings.insert('b', base_octave.saturating_sub(5));  // Lower G
+        self.key_mappings.insert('n', base_octave.saturating_sub(3));  // Lower A
+        self.key_mappings.insert('m', base_octave.saturating_sub(1));  // Lower B
     }
     
     pub fn press_key(&mut self, midi_note: u8) {
@@ -226,30 +274,37 @@ pub struct BlackKey {
 
 impl PianoLayout {
     pub fn new(piano: &Piano, terminal_width: u16) -> Self {
-        // Show 2 octaves but use much more of the terminal width for wider keys
-        let octave_count = 2;
+        // Calculate how many octaves we can fit in the full terminal width
         let white_keys_per_octave = 7;
-        let total_white_keys = octave_count * white_keys_per_octave;
+        let usable_width = terminal_width.saturating_sub(4); // Leave small margin for borders
+        let min_key_width = 6; // Minimum width for readability
         
-        // Use 95% of terminal width and ensure minimum key width
-        let usable_width = (terminal_width as f32 * 0.95) as u16;
-        let key_width = std::cmp::max(6, usable_width / total_white_keys); // Minimum 6 chars wide
-        let black_key_width = std::cmp::max(4, (key_width as f32 * 0.7) as u16); // Minimum 4 chars wide
+        // Calculate maximum octaves that fit with minimum key width
+        let max_white_keys = usable_width / min_key_width;
+        let max_octaves = std::cmp::max(2, max_white_keys / white_keys_per_octave); // At least 2 octaves
+        let octave_count = std::cmp::min(7, max_octaves); // Max 7 octaves (full piano range)
+        
+        let total_white_keys = octave_count * white_keys_per_octave;
+        let key_width = usable_width / total_white_keys; // Distribute evenly across full width
+        let black_key_width = std::cmp::max(3, (key_width as f32 * 0.6) as u16);
         
         let mut white_keys = Vec::new();
         let mut black_keys = Vec::new();
         
-        let (start_note, end_note) = piano.get_octave_range();
         let key_mappings = &piano.key_mappings;
         let char_to_key: HashMap<u8, char> = key_mappings.iter().map(|(&k, &v)| (v, k)).collect();
         
-        // Calculate actual piano width and center it
-        let actual_piano_width = total_white_keys * key_width;
-        let offset_x = (terminal_width.saturating_sub(actual_piano_width)) / 2;
+        // Start from the left edge with margin for borders
+        let offset_x = 2;
         
         let mut white_key_index = 0;
         
-        for midi_note in start_note..end_note.min(start_note + 24) {
+        // Start from C3 and show the calculated number of octaves
+        let start_midi_note = 48; // C3
+        let total_notes = octave_count * 12;
+        
+        for midi_note in start_midi_note..(start_midi_note + total_notes).min(127) {
+            let midi_note = midi_note as u8;
             let note = Note::new(midi_note);
             let is_pressed = piano.pressed_keys.contains_key(&midi_note);
             let key_char = char_to_key.get(&midi_note).copied();
@@ -266,15 +321,19 @@ impl PianoLayout {
                     white_key_index += 1;
                 }
                 NoteType::Black => {
-                    let prev_white_x = if white_key_index > 0 {
+                    // Position black keys between white keys
+                    let white_key_x = if white_key_index > 0 {
                         offset_x + ((white_key_index - 1) * key_width)
                     } else {
                         offset_x
                     };
                     
+                    // Center the black key between current and next white key
+                    let black_x = white_key_x + key_width - (black_key_width / 2);
+                    
                     black_keys.push(BlackKey {
                         note,
-                        x: prev_white_x + key_width - black_key_width / 2,
+                        x: black_x,
                         width: black_key_width,
                         is_pressed,
                         key_char,
@@ -286,7 +345,7 @@ impl PianoLayout {
         Self {
             white_keys,
             black_keys,
-            width: terminal_width,
+            width: terminal_width, // Use full terminal width
             height: 12, // Taller piano for better presence
         }
     }

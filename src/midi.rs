@@ -89,18 +89,44 @@ impl MidiPlayer {
         self.total_ticks = all_events.last().map(|e| e.absolute_time).unwrap_or(0);
         self.events = all_events.into();
         
+        // Debug file loading
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/piano_debug.log") {
+            writeln!(file, "MIDI file loaded: {} events, {} total ticks, tempo: {}, tpq: {}", 
+                    self.events.len(), self.total_ticks, self.tempo, self.ticks_per_quarter).ok();
+            if !self.events.is_empty() {
+                let first_event = &self.events[0];
+                writeln!(file, "  First event at tick: {}", first_event.absolute_time).ok();
+            }
+        }
+        
         Ok(())
     }
     
     pub fn play(&mut self) {
-        if !self.events.is_empty() {
+        if !self.events.is_empty() || self.current_file.is_some() {
             self.is_playing = true;
+            // Always reset start time for now to simplify debugging
             self.start_time = Some(Instant::now());
+            
+            // Debug playback start
+            use std::io::Write;
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/piano_debug.log") {
+                writeln!(file, "PLAYBACK STARTED: {} events available, tempo: {}, tpq: {}", 
+                        self.events.len(), self.tempo, self.ticks_per_quarter).ok();
+            }
         }
     }
     
     pub fn pause(&mut self) {
         self.is_playing = false;
+        // Keep start_time for resuming
     }
     
     pub fn stop(&mut self) {
@@ -114,9 +140,25 @@ impl MidiPlayer {
     }
     
     pub fn toggle_playback(&mut self) {
+        // Debug toggle
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/piano_debug.log") {
+            writeln!(file, "TOGGLE_PLAYBACK called - currently playing: {}, events: {}", 
+                    self.is_playing, self.events.len()).ok();
+        }
+        
         if self.is_playing {
             self.pause();
         } else {
+            // If we've reached the end, restart from beginning
+            if self.events.is_empty() && self.current_file.is_some() {
+                if let Some(path) = self.current_file.clone() {
+                    let _ = self.load_file(path);
+                }
+            }
             self.play();
         }
     }
@@ -129,20 +171,45 @@ impl MidiPlayer {
         let elapsed = self.start_time.unwrap().elapsed();
         let current_tick = self.time_to_ticks(elapsed);
         
-        let mut pending_events = Vec::new();
+        // Debug timing and event processing - write to file
+        if elapsed.as_millis() % 1000 < 50 {  // Print every second
+            use std::io::Write;
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/piano_debug.log") {
+                writeln!(file, "Debug: elapsed={}ms, current_tick={}, events_left={}, tempo={}, tpq={}", 
+                        elapsed.as_millis(), current_tick, self.events.len(), self.tempo, self.ticks_per_quarter).ok();
+                
+                // Show next few events
+                if !self.events.is_empty() {
+                    let next_event = self.events.front().unwrap();
+                    writeln!(file, "  Next event at tick: {}, current tick: {}", next_event.absolute_time, current_tick).ok();
+                }
+            }
+        }
         
-        while !self.events.is_empty() {
+        let mut pending_events = Vec::new();
+        let mut events_processed = 0;
+        
+        while !self.events.is_empty() && events_processed < 10 { // Limit to prevent infinite loops
             if let Some(event) = self.events.front() {
                 if event.absolute_time <= current_tick {
                     let event = self.events.pop_front().unwrap();
                     pending_events.push(event.event);
                     self.current_position = event.absolute_time;
+                    events_processed += 1;
                 } else {
                     break;
                 }
             } else {
                 break;
             }
+        }
+        
+        // Update current position even if no events to process
+        if current_tick > self.current_position {
+            self.current_position = current_tick;
         }
         
         if self.events.is_empty() && self.loop_enabled {
@@ -201,15 +268,20 @@ impl MidiPlayer {
     }
     
     fn time_to_ticks(&self, time: Duration) -> u64 {
-        let microseconds = time.as_micros() as f64;
-        let ticks_per_microsecond = (self.ticks_per_quarter as f64) / (self.tempo as f64);
-        (microseconds * ticks_per_microsecond) as u64
+        // Convert time to ticks based on tempo
+        // tempo is in microseconds per quarter note
+        // ticks_per_quarter is how many ticks make up a quarter note
+        let total_microseconds = time.as_micros() as f64;
+        let quarters = total_microseconds / (self.tempo as f64);
+        let ticks = quarters * (self.ticks_per_quarter as f64);
+        ticks as u64
     }
     
     fn ticks_to_time(&self, ticks: u64) -> Duration {
-        let microseconds_per_tick = (self.tempo as f64) / (self.ticks_per_quarter as f64);
-        let total_microseconds = (ticks as f64) * microseconds_per_tick;
-        Duration::from_micros(total_microseconds as u64)
+        // Convert ticks to time
+        let quarters = (ticks as f64) / (self.ticks_per_quarter as f64);
+        let microseconds = quarters * (self.tempo as f64);
+        Duration::from_micros(microseconds as u64)
     }
     
     pub fn set_loop(&mut self, enabled: bool) {

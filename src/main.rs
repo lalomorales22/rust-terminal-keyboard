@@ -47,7 +47,21 @@ enum Commands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     
-    let mut app = App::new(cli.debug).await?;
+    // Test audio initialization early
+    println!("Initializing audio system...");
+    
+    let mut app = match App::new(cli.debug).await {
+        Ok(app) => {
+            println!("Audio system initialized successfully!");
+            app
+        }
+        Err(e) => {
+            eprintln!("Failed to initialize audio: {}", e);
+            eprintln!("The app will still work but without sound.");
+            eprintln!("This might be due to audio device permissions or configuration.");
+            return Err(e);
+        }
+    };
     
     match cli.command {
         Some(Commands::Play { file }) => {

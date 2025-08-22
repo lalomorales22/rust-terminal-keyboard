@@ -49,16 +49,18 @@ impl UI {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3),  // Header
-                Constraint::Min(15),    // Piano - much more space
+                Constraint::Length(2),  // MIDI Progress (when playing)
+                Constraint::Min(13),    // Piano - still plenty of space
                 Constraint::Length(3),  // Controls
                 Constraint::Length(1),  // Status
             ])
             .split(size);
         
         self.render_header(f, chunks[0], piano, midi_player, audio_engine);
-        self.render_piano(f, chunks[1], piano, effects);
-        self.render_controls(f, chunks[2], piano);
-        self.render_status(f, chunks[3]);
+        self.render_midi_progress(f, chunks[1], midi_player);
+        self.render_piano(f, chunks[2], piano, effects);
+        self.render_controls(f, chunks[3], piano);
+        self.render_status(f, chunks[4]);
         
         if self.show_help {
             self.render_help_popup(f, size);
@@ -128,6 +130,43 @@ impl UI {
             .alignment(Alignment::Center)
             .block(Block::default().title("Status").borders(Borders::ALL));
         f.render_widget(status, header_chunks[3]);
+    }
+    
+    fn render_midi_progress(
+        &self,
+        f: &mut ratatui::Frame,
+        area: Rect,
+        midi_player: &MidiPlayer,
+    ) {
+        if midi_player.current_file.is_some() {
+            let progress = midi_player.get_progress();
+            let (current_time, total_time) = midi_player.get_time_info();
+            
+            let title = if midi_player.is_playing {
+                format!("♪ Playing - {:02}:{:02} / {:02}:{:02}", 
+                    current_time.as_secs() / 60, current_time.as_secs() % 60,
+                    total_time.as_secs() / 60, total_time.as_secs() % 60)
+            } else {
+                format!("♪ Paused - {:02}:{:02} / {:02}:{:02}", 
+                    current_time.as_secs() / 60, current_time.as_secs() % 60,
+                    total_time.as_secs() / 60, total_time.as_secs() % 60)
+            };
+            
+            let gauge_color = if midi_player.is_playing { Color::Green } else { Color::Yellow };
+            
+            let progress_gauge = Gauge::default()
+                .block(Block::default().title(title).borders(Borders::ALL))
+                .gauge_style(Style::default().fg(gauge_color))
+                .ratio(progress as f64);
+            f.render_widget(progress_gauge, area);
+        } else {
+            // Show empty space when no MIDI file is loaded
+            let empty_block = Block::default()
+                .title("No MIDI file loaded - Press L to load")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray));
+            f.render_widget(empty_block, area);
+        }
     }
     
     fn render_piano(
@@ -350,7 +389,8 @@ impl UI {
             Line::from("  + / _     - Octave up/down"),
             Line::from("  Space     - Sustain pedal"),
             Line::from("  R         - Start/stop recording"),
-            Line::from("  P         - Playback last recording"),
+            Line::from("  P (upper) - Toggle MIDI playback (with key lighting)"),
+            Line::from("  p (lower) - Playback last recording"),
             Line::from("  M         - Toggle metronome"),
             Line::from("  L         - Load MIDI file"),
             Line::from("  F1        - Toggle this help"),
