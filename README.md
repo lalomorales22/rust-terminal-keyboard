@@ -1,6 +1,6 @@
 # 🎹 Terminal Piano
-<img width="326" height="477" alt="Screenshot 2025-08-21 at 10 38 35 AM" src="https://github.com/user-attachments/assets/d26ccf08-f153-4098-9580-d75db9b1e46f" />
-<img width="577" height="521" alt="Screenshot 2025-08-21 at 10 37 59 AM" src="https://github.com/user-attachments/assets/aa7368fc-2c71-4439-98f0-f611716586c8" />
+
+<img width="752" height="424" alt="Screenshot 2025-08-22 at 12 37 49 AM" src="https://github.com/user-attachments/assets/981b6ccd-329e-45e2-b691-0e69ffc7f7d9" />
 
 
 A spectacular, fully-featured grand piano in your terminal with colorful note visualization, MIDI playback, and recording capabilities. Experience music in living color with note-specific visual effects and full-width responsive piano layout!
